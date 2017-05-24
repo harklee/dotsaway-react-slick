@@ -558,10 +558,11 @@ class RenderSlides extends React.Component {
 
 export class Track extends React.Component {
   render() {
-    var slides = renderSlides.call(this, this.props);
+    var slides = RenderSlides.call(this, this.props);
+ 
     return (
-      <div className='slick-track' style={this.props.trackStyle}>
-        { slides }
+      <div className = 'slick-track' style = {this.props.trackStyle}>
+        <RenderSlides spec={this.props}></RenderSlides>
       </div>
     );
   }
