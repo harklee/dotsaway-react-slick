@@ -66,11 +66,16 @@ var getKey = (child, fallbackKey) => {
 
 
 class RenderSlides extends React.Component {
-  constructor() {
+  constructor(props) {
     super();
 
     // number of slides
-    var count = React.Children.count(this.props.spec.children);
+    if(props.spec){
+      var count = React.Children.count(props.spec.children);
+    }
+    else{
+      var count = 0;
+    }
 
     // arrays
     var preScale = [];
