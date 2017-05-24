@@ -43,9 +43,17 @@ var defaultProps = {
     edgeEvent: null,
     init: null,
     swipeEvent: null,
+    
     // nextArrow, prevArrow are react componets
     nextArrow: null,
-    prevArrow: null
+    prevArrow: null,
+
+    // Project Dots : customized variables 
+    hoverZoom: false,
+    hoverZoomScale: 1.55,
+    overFlow: false,
+    galleryMode: false,
+    galleryClickHandler: null
 };
 
 module.exports = defaultProps;

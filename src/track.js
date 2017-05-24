@@ -47,6 +47,15 @@ var getSlideStyle = function (spec) {
     style.WebkitTransition = 'opacity ' + spec.speed + 'ms ' + spec.cssEase;
   }
 
+  // Project Dots : DOM control parameters
+  if (spec.hoverZoom) {
+    style.position = 'relative';
+    style.left = 0;
+    style.transform = 'scale(1.0)';
+    style.WebkitTransform = 'scale(1.0)';
+    style.MsTransform = 'scale(1.0)';
+  }
+
   return style;
 };
 
@@ -55,90 +64,497 @@ var getKey = (child, fallbackKey) => {
     return (child.key === null || child.key === undefined) ? fallbackKey : child.key;
 };
 
-var renderSlides = function (spec) {
-  var key;
-  var slides = [];
-  var preCloneSlides = [];
-  var postCloneSlides = [];
-  var count = React.Children.count(spec.children);
 
+class RenderSlides extends React.Component {
+  constructor() {
+    super();
 
-  React.Children.forEach(spec.children, (elem, index) => {
-    let child;
-    var childOnClickOptions = {
-      message: 'children',
-      index: index,
-      slidesToScroll: spec.slidesToScroll,
-      currentSlide: spec.currentSlide
+    // number of slides
+    var count = React.Children.count(this.props.spec.children);
+
+    // arrays
+    var preScale = [];
+    var postScale = [];
+    var scale = [];
+    var preShift = [];
+    var postShift = [];
+    var shift = [];
+
+    // initialize the states
+    for (var i = 0; i < count; i++){
+      preScale[i] = 1.0;
+      postScale[i] = 1.0;
+      scale[i] = 1.0;
+      preShift[i] = 0;
+      postShift[i] = 0;
+      shift[i] = 0;
+    }
+
+    this.state = {
+      count: count,
+      shift: shift,
+      preShift: preShift,
+      postShift: postShift,
+      scale: scale,
+      preScale: preScale,
+      postScale: postScale,
     };
-
-    if (!spec.lazyLoad | (spec.lazyLoad && spec.lazyLoadedList.indexOf(index) >= 0)) {
-      child = elem;
-    } else {
-      child = (<div></div>);
-    }
-    var childStyle = getSlideStyle(assign({}, spec, {index: index}));
-    var slickClasses = getSlideClasses(assign({index: index}, spec));
-    var cssClasses;
-
-    if (child.props.className) {
-        cssClasses = classnames(slickClasses, child.props.className);
-    } else {
-        cssClasses = slickClasses;
-    }
-
-    const onClick = function(e) {
-      child.props && child.props.onClick && child.props.onClick(e)
-      if (spec.focusOnSelect) {
-        spec.focusOnSelect(childOnClickOptions)
-      }
-    }
-
-    slides.push(React.cloneElement(child, {
-      key: 'original' + getKey(child, index),
-      'data-index': index,
-      className: cssClasses,
-      tabIndex: '-1',
-      style: assign({outline: 'none'}, child.props.style || {}, childStyle),
-      onClick
-    }));
-
-    // variableWidth doesn't wrap properly.
-    if (spec.infinite && spec.fade === false) {
-      var infiniteCount = spec.variableWidth ? spec.slidesToShow + 1 : spec.slidesToShow;
-
-      if (index >= (count - infiniteCount)) {
-        key = -(count - index);
-        preCloneSlides.push(React.cloneElement(child, {
-          key: 'precloned' + getKey(child, key),
-          'data-index': key,
-          className: cssClasses,
-          style: assign({}, child.props.style || {}, childStyle),
-          onClick
-        }));
-      }
-
-      if (index < infiniteCount) {
-        key = count + index;
-        postCloneSlides.push(React.cloneElement(child, {
-          key: 'postcloned' + getKey(child, key),
-          'data-index': key,
-          className: cssClasses,
-          style: assign({}, child.props.style || {}, childStyle),
-          onClick
-        }));
-      }
-    }
-  });
-
-  if (spec.rtl) {
-    return preCloneSlides.concat(slides, postCloneSlides).reverse();
-  } else {
-    return preCloneSlides.concat(slides, postCloneSlides);
   }
 
+  // mouse click event
+  onClick(key, e) {
+    /* original code
+    child.props && child.props.onClick && child.props.onClick(e)
+    if (spec.focusOnSelect) {
+      spec.focusOnSelect(childOnClickOptions)
+    }
+    */
+  }
 
-};
+  // mouse over event
+  onMouseOver(key, e) {
+    // if hover zoom is enabled
+    if(this.props.spec.hoverZoom){
+      // scale and shift amount
+      var scaleUp = this.props.spec.hoverZoomScale;
+      var shiftLength = (this.props.spec.hoverZoomScale-1.0)*this.props.spec.slideWidth/2;
+      var shiftLengthEdge = shiftLength/scaleUp;
+
+      // new arrays
+      var newShift = [];
+      var newPreShift = [];
+      var newPostShift = [];
+      var newScale = [];
+      var newPreScale = [];
+      var newPostScale = [];
+
+      // number of slides
+      var slideCount = React.Children.count(this.props.spec.children);
+      var viewCount = this.props.spec.slidesToShow;
+      
+      //console.log("onMouseOver");
+      //console.log("===============================");
+      //console.log("key = ",key);
+      //console.log("slideCount = ",slideCount);
+      //console.log("viewCount = ",viewCount);
+
+      // if the slide in focus on the edge of the list
+      var leftEdge = (key == this.props.spec.currentSlide);
+      var rightEdge = (key == (this.props.spec.currentSlide + viewCount - 1));
+
+      // edge
+      if(leftEdge || rightEdge){
+        if(leftEdge){
+          // add shift and scale parameters
+          if((key >= 0) && (key < slideCount)){
+            for (var j = 0; j < slideCount; j++){
+              if(j < key){
+                newShift[j] = 0;
+                newScale[j] = 1.0;
+              }
+              if(j == key){
+                newShift[j] = shiftLengthEdge;
+                newScale[j] = scaleUp;
+              }
+              if(j > key){
+                newShift[j] = shiftLength*2;
+                newScale[j] = 1.0;
+              }
+              newPreScale[j] = 1.0;
+              newPostScale[j] = 1.0;
+              newPreShift[j] = 0;
+              newPostShift[j] = shiftLength*2;
+            }
+          }
+          if(key < 0){
+            for (var j = 0; j < slideCount; j++){
+              if(j < (key + slideCount)){
+                newPreShift[j] = 0;
+                newPreScale[j] = 1.0;
+              }
+              if(j == (key + slideCount)){
+                newPreShift[j] = shiftLengthEdge;
+                newPreScale[j] = scaleUp;
+              }
+              if(j > (key + slideCount)){
+                newPreShift[j] = shiftLength*2;
+                newPreScale[j] = 1.0;
+              }
+              newScale[j] = 1.0;
+              newPostScale[j] = 1.0;
+              newShift[j] = shiftLength*2;
+              newPostShift[j] = shiftLength*2;
+            }
+          }
+          if(key >= slideCount){
+            for (var j = 0; j < slideCount; j++){
+              if(j < (key - slideCount)){
+                newPostShift[j] = 0;
+                newPostScale[j] = 1.0;
+              }
+              if(j == (key - slideCount)){
+                newPostShift[j] = shiftLengthEdge;
+                newPostScale[j] = scaleUp;
+              }
+              if(j > (key - slideCount)){
+                newPostShift[j] = shiftLength*2;
+                newPostScale[j] = 1.0;
+              }
+              newPreScale[j] = 1.0;
+              newScale[j] = 1.0;
+              newPreShift[j] = 0;
+              newShift[j] = 0;
+            }        
+          }
+        }
+        if(rightEdge){
+          // add shift and scale parameters
+          if((key >= 0) && (key < slideCount)){
+            for (var j = 0; j < slideCount; j++){
+              if(j < key){
+                newShift[j] = -shiftLength*2;
+                newScale[j] = 1.0;
+              }
+              if(j == key){
+                newShift[j] = -shiftLengthEdge;
+                newScale[j] = scaleUp;
+              }
+              if(j > key){
+                newShift[j] = 0;
+                newScale[j] = 1.0;
+              }
+              newPreScale[j] = 1.0;
+              newPostScale[j] = 1.0;
+              newPreShift[j] = -shiftLength*2;
+              newPostShift[j] = 0;
+            }
+          }
+          if(key < 0){
+            for (var j = 0; j < slideCount; j++){
+              if(j < (key + slideCount)){
+                newPreShift[j] = -shiftLength*2;
+                newPreScale[j] = 1.0;
+              }
+              if(j == (key + slideCount)){
+                newPreShift[j] = -shiftLengthEdge;
+                newPreScale[j] = scaleUp;
+              }
+              if(j > (key + slideCount)){
+                newPreShift[j] = 0;
+                newPreScale[j] = 1.0;
+              }
+              newScale[j] = 1.0;
+              newPostScale[j] = 1.0;
+              newShift[j] = 0;
+              newPostShift[j] = 0;
+            }
+          }
+          if(key >= slideCount){
+            for (var j = 0; j < slideCount; j++){
+              if(j < (key - slideCount)){
+                newPostShift[j] = -shiftLength*2;
+                newPostScale[j] = 1.0;
+              }
+              if(j == (key - slideCount)){
+                newPostShift[j] = -shiftLengthEdge;
+                newPostScale[j] = scaleUp;
+              }
+              if(j > (key - slideCount)){
+                newPostShift[j] = 0;
+                newPostScale[j] = 1.0;
+              }
+              newPreScale[j] = 1.0;
+              newScale[j] = 1.0;
+              newPreShift[j] = -shiftLength*2;
+              newShift[j] = -shiftLength*2;
+            }        
+          }
+        }
+      } else{
+        // add shift and scale parameters
+        if((key >= 0) && (key < slideCount)){
+          for (var j = 0; j < slideCount; j++){
+            if(j < key){
+              newShift[j] = -shiftLength;
+              newScale[j] = 1.0;
+            }
+            if(j == key){
+              newShift[j] = 0;
+              newScale[j] = scaleUp;
+            }
+            if(j > key){
+              newShift[j] = shiftLength;
+              newScale[j] = 1.0;
+            }
+            newPreScale[j] = 1.0;
+            newPostScale[j] = 1.0;
+            newPreShift[j] = -shiftLength;
+            newPostShift[j] = shiftLength;
+          }
+        }
+        if(key < 0){
+          for (var j = 0; j < slideCount; j++){
+            if(j < (key + slideCount)){
+              newPreShift[j] = -shiftLength;
+              newPreScale[j] = 1.0;
+            }
+            if(j == (key + slideCount)){
+              newPreShift[j] = 0;
+              newPreScale[j] = scaleUp;
+            }
+            if(j > (key + slideCount)){
+              newPreShift[j] = shiftLength;
+              newPreScale[j] = 1.0;
+            }
+            newScale[j] = 1.0;
+            newPostScale[j] = 1.0;
+            newShift[j] = shiftLength;
+            newPostShift[j] = shiftLength;
+          }
+        }
+        if(key >= slideCount){
+          for (var j = 0; j < slideCount; j++){
+            if(j < (key - slideCount)){
+              newPostShift[j] = -shiftLength;
+              newPostScale[j] = 1.0;
+            }
+            if(j == (key - slideCount)){
+              newPostShift[j] = 0;
+              newPostScale[j] = scaleUp;
+            }
+            if(j > (key - slideCount)){
+              newPostShift[j] = shiftLength;
+              newPostScale[j] = 1.0;
+            }
+            newPreScale[j] = 1.0;
+            newScale[j] = 1.0;
+            newPreShift[j] = -shiftLength;
+            newShift[j] = -shiftLength;
+          }        
+        }
+      }
+
+      // set states
+      this.setState({
+        scale: newScale, 
+        preScale: newPreScale, 
+        postScale: newPostScale, 
+        shift: newShift, 
+        preShift: newPreShift, 
+        postShift: newPostShift
+      });
+      //console.log('key = ',key,' / shift = ',newPreShift,newShift,newPostShift);
+    }
+  }
+
+  // mouse out event
+  onMouseOut(key, e) {
+    // number of slides
+    //var count = this.props.spec.slidesToShow;
+    var slideCount = React.Children.count(this.props.spec.children);
+    
+    // if hover zoom is enabled
+    if(this.props.spec.hoverZoom){
+      // new arrays
+      var newShift = [];
+      var newPreShift = [];
+      var newPostShift = [];
+      var newScale = [];
+      var newPreScale = [];
+      var newPostScale = [];
+
+      // initialize all values        
+      for (var j = 0; j < slideCount; j++){
+        newPreShift[j] = 0;
+        newPostShift[j] = 0;
+        newShift[j] = 0;
+        newPreScale[j] = 1.0;
+        newPostScale[j] = 1.0;
+        newScale[j] = 1.0;
+      }
+
+      // set states
+      this.setState({
+        scale: newScale, 
+        preScale: newPreScale, 
+        postScale: newPostScale, 
+        shift: newShift, 
+        preShift: newPreShift, 
+        postShift: newPostShift
+      });
+    }
+  }
+
+  render(){
+    // slide objects
+    var slides = [];
+
+    // clone slides for left (pre) and right (post)
+    var preCloneSlides = [];
+    var postCloneSlides = [];
+
+    // number of slides
+    var count = React.Children.count(this.props.spec.children);
+
+    // slide settings
+    var spec = this.props.spec;
+
+    // for all children objects
+    React.Children.forEach(spec.children, (elem, index) => {
+      // child will be a local variable
+      let child;
+
+      // onClick options
+      var childOnClickOptions = {
+        message: 'children',
+        index: index,
+        slidesToScroll: spec.slidesToScroll,
+        currentSlide: spec.currentSlide
+      };
+
+      // lazyload vs normal load
+      if (!spec.lazyLoad | (spec.lazyLoad && spec.lazyLoadedList.indexOf(index) >= 0)) {
+        child = elem;
+      } else {
+        child = (<div></div>);
+      }
+
+      // get styles and classes
+      var childStyle = getSlideStyle(assign({}, spec, {index: index}));
+
+      // get slick classes
+      var slickClasses = getSlideClasses(assign({index: index},spec));
+
+      // add CSS classes if the element has children
+      var cssClasses;
+      if (child.props.className) {
+          cssClasses = classnames(slickClasses, child.props.className);
+      } else {
+          cssClasses = slickClasses;
+      }
+
+      // slide index key
+      var key = index;
+
+      // transition style 
+      var transitionStyle = {
+        transition: 'transform ' + spec.speed + 'ms ' + spec.cssEase,
+        WebkitTransition: '-webkit-transform ' + spec.speed + 'ms ' + spec.cssEase,
+        msTransition: '-ms-transform ' + spec.speed + 'ms ' + spec.cssEase
+      };
+
+      // animation styles (linking state variables of RenderSlides components with DOM styles)
+      var style = assign({}, child.props.style || {}, childStyle, {
+        transform: 'scale('+this.state.scale[index]+') translate('+this.state.shift[index]+'px,0px)',
+        WebkitTransform: 'scale('+this.state.scale[index]+') translate('+this.state.shift[index]+'px,0px)',
+        msTransform: 'scale('+this.state.scale[index]+') translate('+this.state.shift[index]+'px,0px)'
+      },transitionStyle);
+
+      // settings
+      var settings = {
+        key: 'original' + getKey(child, index),
+        'data-index': index,
+        className: cssClasses,
+        tabIndex: '-1',
+        style: style,
+        onMouseOver: this.onMouseOver.bind(this,key),
+        onMouseOut: this.onMouseOut.bind(this,key)
+      }
+
+      // main slide objects
+      if(this.props.spec.galleryMode){
+        // gallery click settings
+        var clickSettings = {onClick: this.props.spec.galleryClickHandler.bind(this,key)};
+        slides.push(React.cloneElement(child,assign(settings,clickSettings)));
+      } else{
+        slides.push(React.cloneElement(child,settings));
+      }
+
+      // for infinite loop (variableWidth doesn't wrap properly)
+      if (spec.infinite && spec.fade === false) {
+        var infiniteCount = spec.variableWidth ? spec.slidesToShow + 1 : spec.slidesToShow;
+
+        // preclone slides
+        if (index >= (count - infiniteCount)) {
+          // index key
+          key = -(count - index);
+
+          // animation styles (linking state variables of RenderSlides components with DOM styles)
+          style = assign({}, child.props.style || {}, childStyle, {
+            transform: 'scale('+this.state.preScale[key + count]+') translate('+this.state.preShift[key + count]+'px,0px)',
+            WebkitTransform: 'scale('+this.state.preScale[key + count]+') translate('+this.state.preShift[key + count]+'px,0px)',
+            msTransform: 'scale('+this.state.preScale[key + count]+') translate('+this.state.preShift[key + count]+'px,0px)'
+          },transitionStyle);
+
+          // settings
+          var settings = {
+            key: 'precloned' + getKey(child, key),
+            'data-index': key,
+            className: cssClasses,
+            style: style,
+            onMouseOver: this.onMouseOver.bind(this,key),
+            onMouseOut: this.onMouseOut.bind(this,key)
+          }
+
+          // preclone slide objects
+          if(this.props.spec.galleryMode){
+            // gallery click settings
+            var clickSettings = {onClick: this.props.spec.galleryClickHandler.bind(this,key)};
+            preCloneSlides.push(React.cloneElement(child,assign(settings,clickSettings)));
+          } else{
+            preCloneSlides.push(React.cloneElement(child,settings));
+          }
+        }
+
+        // postclone slides
+        if (index < infiniteCount) {
+          // index key
+          key = count + index;
+
+          // animation styles (linking state variables of RenderSlides components with DOM styles)
+          style = assign({}, child.props.style || {}, childStyle, {
+            transform: 'scale('+this.state.postScale[key - count]+') translate('+this.state.postShift[key - count]+'px,0px)',
+            WebkitTransform: 'scale('+this.state.postScale[key - count]+') translate('+this.state.postShift[key - count]+'px,0px)',
+            msTransform: 'scale('+this.state.postScale[key - count]+') translate('+this.state.postShift[key + count]+'px,0px)'
+          },transitionStyle);
+
+          // settings
+          var settings = {
+            key: 'postcloned' + getKey(child, key),
+            'data-index': key,
+            className: cssClasses,
+            style: style,
+            onMouseOver: this.onMouseOver.bind(this,key),
+            onMouseOut: this.onMouseOut.bind(this,key)
+          }
+
+          // postclone slide objects
+          if(this.props.spec.galleryMode){
+            // gallery click settings
+            var clickSettings = {onClick: this.props.spec.galleryClickHandler.bind(this,key)};
+            postCloneSlides.push(React.cloneElement(child,assign(settings,clickSettings)));
+          } else{
+            postCloneSlides.push(React.cloneElement(child,settings));
+          }
+        }
+      }
+    });
+
+    // put together all slides
+    var slidesFinal = [];
+    if (spec.rtl) {
+      slidesFinal = preCloneSlides.concat(slides, postCloneSlides).reverse();
+    } else {
+      slidesFinal = preCloneSlides.concat(slides, postCloneSlides);
+    }
+
+    // return
+    return(
+      <div>{slidesFinal}</div>
+    );
+  }
+}
+
 
 export class Track extends React.Component {
   render() {
